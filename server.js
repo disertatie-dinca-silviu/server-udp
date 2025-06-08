@@ -10,15 +10,22 @@ server.on('message', (msg, rinfo) => {
   //const clientKey = `${rinfo.address}:${rinfo.port}`;
   const clientId = `${rinfo.address}:${rinfo.port}`; // identificare unică per client
 
+  const messageString = msg.toString();
+  if (messageString === 'DISCONNECT') {
+    // Dacă clientul trimite un mesaj de deconectare, îl eliminăm
+    if (clients.has(clientId)) {
+      clients.delete(clientId);
+      console.log(`Client deconectat: ${rinfo.address}:${rinfo.port}`);
+    }
+    return; // ieșim din funcție pentru a nu procesa mai departe
+  }
+  
   // Înregistrăm clientul dacă nu există
   if (!clients.has(clientId)) {
     clients.set(clientId, { address: rinfo.address, port: rinfo.port });
     console.log(`Client nou: ${rinfo.address}:${rinfo.port}`);
   }
-
-  console.log(`Received ${msg.length} bytes from ${rinfo.address}:${rinfo.port}`);
   file.write(msg);
-  // Relay către toți ceilalți clienți
   for (const [key, client] of clients.entries()) {
     if (key !== clientId) {
       server.send(msg, client.port, client.address, err => {
