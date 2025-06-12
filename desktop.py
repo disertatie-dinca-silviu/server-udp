@@ -2,12 +2,27 @@ import socket
 import sounddevice as sd
 import threading
 import keyboard  # pip install keyboard
+import platform
+import json
+from dotenv import load_dotenv
+import os
 
-SERVER_IP = '192.168.216.98'
+load_dotenv()
+
+SERVER_IP = os.getenv('SERVER_IP')
 SERVER_PORT = 41234
 CHUNK_SIZE = 2048
-SAMPLE_RATE = 16000
 CHANNELS = 1
+
+print(sd.query_devices())
+print(sd.default.device)
+SOUND_INFORMATION = sd.query_devices(sd.default.device[1], 'output'),
+print(json.dumps(SOUND_INFORMATION, indent=2))
+
+if SOUND_INFORMATION is not None:
+    SAMPLE_RATE = SOUND_INFORMATION[0]['default_samplerate']
+else:
+    SAMPLE_RATE = 44100 if  platform.system() == "Linux" else 16000
 
 # Socket UDP
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -15,7 +30,7 @@ sock.sendto(b'hello', (SERVER_IP, SERVER_PORT))  # Ping inițial
 
 def receive_audio():
     """Ascultă constant audio de la server."""
-    with sd.RawOutputStream(
+    with sd.OutputStream(
         samplerate=SAMPLE_RATE,
         blocksize=CHUNK_SIZE,
         dtype='int16',

@@ -2,3 +2,4 @@ node_modules/
 .*pcm
 .*wav
 *.pcm
+.env
