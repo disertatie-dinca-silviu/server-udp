@@ -3,3 +3,5 @@ node_modules/
 .*wav
 *.pcm
 .env
+.csv
+client_stats.csv
