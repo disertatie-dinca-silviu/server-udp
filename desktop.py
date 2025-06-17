@@ -1,3 +1,4 @@
+import os
 import socket
 import sounddevice as sd
 import threading
@@ -8,6 +9,8 @@ from tkinter import messagebox
 import platform
 import psutil
 import json
+import dotenv
+# Load environment variables        
 
 CHUNK_SIZE = 2048
 CHANNELS = 1
@@ -15,7 +18,8 @@ SAMPLE_RATE = 44100 if platform.system() == "Linux" else 16000
 
 sock = None
 connected = False
-
+SERVER_IP = dotenv.get_key(key_to_get='SERVER_IP', dotenv_path='.env')
+print(f"SERVER_IP: {SERVER_IP}")
 
 def guess_network_type():
     stats = psutil.net_if_stats()
@@ -127,6 +131,7 @@ root.resizable(False, False)
 
 tk.Label(root, text="Server IP:").pack(pady=(20, 5))
 server_ip = tk.StringVar()
+server_ip.set(SERVER_IP if SERVER_IP else "")
 ip_entry = tk.Entry(root, textvariable=server_ip, font=("Arial", 12), width=25)
 ip_entry.pack()
 

@@ -10,6 +10,7 @@ const latencyStats = new Map(); // clientId => [valori recente]
 const jitterStats = new Map();
 const lastPacket = new Map();
 const clientData = {}
+const clientOffset = new Map(); // clientId => offset
 
 function writeStatsToCSV(stats) {
   const filePath = path.join(__dirname, 'client_stats.csv');
@@ -81,10 +82,16 @@ server.on('message', (msg, rinfo) => {
   clientData.receivedPackets = (clientData.receivedPackets || 0) + 1;
 
   const now = Date.now(); // în milisecunde
-  const latency = now - Number(timestamp);
+
+  if (!clientOffset.has(clientId)) {
+    // Setăm offset-ul pentru client dacă nu există
+    clientOffset.set(clientId, Math.abs(now - Number(timestamp)));
+  }
+
+  const latency = now - Number(timestamp) + clientOffset.get(clientId); // calculăm latența 
 
   let latencies = latencyStats.get(clientId) || [];
-  latencies.push(latency);
+  if (latency > 0) latencies.push(latency);
   if (latencies.length > 50) latencies.shift(); // menținem ultimele 50
   latencyStats.set(clientId, latencies);
 
