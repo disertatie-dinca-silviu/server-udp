@@ -1,35 +1,20 @@
 import socket
 import sounddevice as sd
 import threading
-import keyboard  # pip install keyboard
-import platform
-import json
-from dotenv import load_dotenv
-import os
 import struct
 import time
+import tkinter as tk
+from tkinter import messagebox
+import platform
 import psutil
+import json
 
-load_dotenv()
-
-SERVER_IP = os.getenv('SERVER_IP')
-SERVER_PORT = 41234
 CHUNK_SIZE = 2048
 CHANNELS = 1
+SAMPLE_RATE = 44100 if platform.system() == "Linux" else 16000
 
-print(sd.query_devices())
-print(sd.default.device)
-SOUND_INFORMATION = sd.query_devices(sd.default.device[1], 'output'),
-print(json.dumps(SOUND_INFORMATION, indent=2))
-
-if SOUND_INFORMATION is not None:
-    SAMPLE_RATE = SOUND_INFORMATION[0]['default_samplerate']
-else:
-    SAMPLE_RATE = 44100 if  platform.system() == "Linux" else 16000
-
-# Socket UDP
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.sendto(b'hello', (SERVER_IP, SERVER_PORT))  # Ping inițial
+sock = None
+connected = False
 
 
 def guess_network_type():
@@ -45,67 +30,115 @@ def guess_network_type():
                 return "Mobile (4G/5G)"
     return "Unknown"
 
-print("Tip conexiune activă:", guess_network_type())
-
 
 def receive_audio():
-    """Ascultă constant audio de la server."""
-    with sd.OutputStream(
-        samplerate=SAMPLE_RATE,
-        blocksize=CHUNK_SIZE,
-        dtype='int16',
-        channels=CHANNELS
-    ) as stream:
-        print("[🔊] Ascultare activă...")
-        while True:
-            try:
+    global connected
+    try:
+        with sd.OutputStream(samplerate=SAMPLE_RATE, blocksize=CHUNK_SIZE, dtype='int16', channels=CHANNELS) as stream:
+            update_status("[🔊] Ascultare activă...")
+            while connected:
                 data, _ = sock.recvfrom(CHUNK_SIZE)
                 stream.write(data)
-            except Exception as e:
-                print("Eroare la recepție:", e)
-                break
+    except Exception as e:
+        update_status(f"Eroare la recepție: {e}")
+
 
 def transmit_audio():
-    """Transmite audio cât timp este apăsată tasta 't'."""
+    global connected
+    if not connected:
+        update_status("❌ Nu ești conectat la un server!")
+        return
+
     seq_number = 0
-    with sd.RawInputStream(
-        samplerate=SAMPLE_RATE,
-        blocksize=CHUNK_SIZE,
-        dtype='int16',
-        channels=CHANNELS
-    ) as stream:
-        print("[🎙️] Transmitere activă...")
-        while keyboard.is_pressed('t'):
-            try:
-                timestamp = int(time.time() * 1000)  # milisecunde
+    try:
+        with sd.RawInputStream(samplerate=SAMPLE_RATE, blocksize=CHUNK_SIZE, dtype='int16', channels=CHANNELS) as stream:
+            update_status("[🎙️] Transmitere activă...")
+            while push_to_talk_btn_pressed:
+                timestamp = int(time.time() * 1000)
                 seq_number += 1
                 header = struct.pack('!QQ', seq_number, timestamp)
                 data, _ = stream.read(CHUNK_SIZE // 2)
                 packet = header + data
-                sock.sendto(packet, (SERVER_IP, SERVER_PORT))
-            except Exception as e:
-                print("Eroare la transmitere:", e)
-                break
-        print("[🛑] Transmitere oprită.")
+                sock.sendto(packet, (server_ip.get(), SERVER_PORT))
+    except Exception as e:
+        update_status(f"Eroare la transmitere: {e}")
+    finally:
+        update_status("[🛑] Transmitere oprită.")
 
-# Thread recepție audio
-threading.Thread(target=receive_audio, daemon=True).start()
 
-def send_disconnect_message():
-    network_type = guess_network_type()
-    message = 'DISCONNECT:'+network_type
-    sock.sendto(message.encode('utf-8'), (SERVER_IP, SERVER_PORT))
+def connect_to_server():
+    global sock, connected
+    ip = server_ip.get()
+    if not ip:
+        update_status("❗ Introdu un IP valid.")
+        return
 
-print("Ține apăsat 't' pentru a vorbi (Push-to-Talk). Ctrl+C pentru a ieși.")
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.sendto(b'hello', (ip, SERVER_PORT))
+        connected = True
+        update_status(f"✅ Conectat la {ip} ({guess_network_type()})")
 
-try:
-    while True:
-        if keyboard.is_pressed('t'):
-            transmit_audio()  # Rulează cât e apăsat
-except KeyboardInterrupt:
-    print("Ieșire...")
-    #trimitem mesaj de DISCONNECT
-    send_disconnect_message()
-    sock.close()
-    exit(0)
-# Închide socket-ul la ieșire           
+        # Start receiving thread
+        threading.Thread(target=receive_audio, daemon=True).start()
+    except Exception as e:
+        update_status(f"❌ Conectare eșuată: {e}")
+        connected = False
+
+
+def disconnect_from_server():
+    global connected
+    if connected and sock:
+        message = 'DISCONNECT:' + guess_network_type()
+        sock.sendto(message.encode('utf-8'), (server_ip.get(), SERVER_PORT))
+        sock.close()
+        update_status("🔌 Deconectat.")
+        connected = False
+
+
+def on_push_to_talk_press(event=None):
+    global push_to_talk_btn_pressed
+    push_to_talk_btn_pressed = True
+    threading.Thread(target=transmit_audio, daemon=True).start()
+
+
+def on_push_to_talk_release(event=None):
+    global push_to_talk_btn_pressed
+    push_to_talk_btn_pressed = False
+
+
+def update_status(message):
+    status_label.config(text=message)
+
+
+def on_closing():
+    disconnect_from_server()
+    root.destroy()
+
+
+# GUI
+SERVER_PORT = 41234
+push_to_talk_btn_pressed = False
+
+root = tk.Tk()
+root.title("VoIP Client")
+root.geometry("400x250")
+root.resizable(False, False)
+
+tk.Label(root, text="Server IP:").pack(pady=(20, 5))
+server_ip = tk.StringVar()
+ip_entry = tk.Entry(root, textvariable=server_ip, font=("Arial", 12), width=25)
+ip_entry.pack()
+
+tk.Button(root, text="Conectează-te", command=connect_to_server, bg="lightgreen").pack(pady=10)
+
+push_to_talk_btn = tk.Button(root, text="Push to Talk", width=20, bg="lightblue")
+push_to_talk_btn.pack(pady=10)
+push_to_talk_btn.bind("<ButtonPress>", on_push_to_talk_press)
+push_to_talk_btn.bind("<ButtonRelease>", on_push_to_talk_release)
+
+status_label = tk.Label(root, text="Neconectat.", fg="gray")
+status_label.pack(pady=20)
+
+root.protocol("WM_DELETE_WINDOW", on_closing)
+root.mainloop()
