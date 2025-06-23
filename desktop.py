@@ -1,5 +1,6 @@
 import os
 import socket
+import numpy as np
 import sounddevice as sd
 import threading
 import struct
@@ -14,7 +15,7 @@ import dotenv
 
 CHUNK_SIZE = 2048
 CHANNELS = 1
-SAMPLE_RATE = 44100 if platform.system() == "Linux" else 16000
+SAMPLE_RATE = 16000
 
 sock = None
 connected = False
@@ -41,8 +42,12 @@ def receive_audio():
         with sd.OutputStream(samplerate=SAMPLE_RATE, blocksize=CHUNK_SIZE, dtype='int16', channels=CHANNELS) as stream:
             update_status("[🔊] Ascultare activă...")
             while connected:
-                data, _ = sock.recvfrom(CHUNK_SIZE)
-                stream.write(data)
+               data, _ = sock.recvfrom(65536)  # buffer mare să nu tai date
+               if len(data) <= 16:
+                    continue  # Pachet invalid sau doar header, ignoră
+                
+               audio_data = np.frombuffer(data[16:], dtype=np.int16)  # sar peste header
+               stream.write(audio_data)
     except Exception as e:
         update_status(f"Eroare la recepție: {e}")
 

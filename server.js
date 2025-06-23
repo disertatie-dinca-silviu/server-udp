@@ -129,10 +129,10 @@ server.on('message', (msg, rinfo) => {
     clients.set(clientId, { address: rinfo.address, port: rinfo.port });
     console.log(`Client nou: ${rinfo.address}:${rinfo.port}`);
   }
-  file.write(msg);
+  file.write(audioBuffer);
   for (const [key, client] of clients.entries()) {
     if (key !== clientId) {
-      server.send(msg, client.port, client.address, err => {
+      server.send(audioBuffer, client.port, client.address, err => {
         if (err) {
           console.error(`Eroare la trimiterea către ${client.address}:${client.port}:`, err);
         }
