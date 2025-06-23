@@ -5,21 +5,35 @@ import threading
 import struct
 import time
 import tkinter as tk
-from tkinter import messagebox
 import platform
 import psutil
-import json
 import dotenv
-# Load environment variables        
+import ctypes
+import opuslib  # <--- opuslib, nu pyogg!
 
-CHUNK_SIZE = 2048
-CHANNELS = 1
-SAMPLE_RATE = 44100 if platform.system() == "Linux" else 16000
+# Încarcă DLL-ul Opus dacă e pe Windows
+if platform.system() == "Windows":
+    opus_dll_path = os.path.abspath("opus.dll")
+    ctypes.cdll.LoadLibrary(opus_dll_path)
 
-sock = None
-connected = False
+# Încarcă variabile din .env
+dotenv.load_dotenv()
 SERVER_IP = dotenv.get_key(key_to_get='SERVER_IP', dotenv_path='.env')
 print(f"SERVER_IP: {SERVER_IP}")
+
+# Configurații
+CHUNK_SIZE = 2048
+CHANNELS = 1
+SAMPLE_RATE = 16000 if platform.system() == "Windows" else 44100
+SERVER_PORT = 41234
+connected = False
+sock = None
+
+# Init encoder/decoder
+encoder = opuslib.Encoder(SAMPLE_RATE, CHANNELS, opuslib.APPLICATION_AUDIO)
+encoder.bitrate = 32000
+decoder = opuslib.Decoder(SAMPLE_RATE, CHANNELS)
+
 
 def guess_network_type():
     stats = psutil.net_if_stats()
@@ -41,8 +55,11 @@ def receive_audio():
         with sd.OutputStream(samplerate=SAMPLE_RATE, blocksize=CHUNK_SIZE, dtype='int16', channels=CHANNELS) as stream:
             update_status("[🔊] Ascultare activă...")
             while connected:
-                data, _ = sock.recvfrom(CHUNK_SIZE)
-                stream.write(data)
+                data, _ = sock.recvfrom(8192)
+                header_size = struct.calcsize('!QQ')
+                payload = data[header_size:]
+                decoded_data = decoder.decode(payload, CHUNK_SIZE // 2)
+                stream.write(decoded_data)
     except Exception as e:
         update_status(f"Eroare la recepție: {e}")
 
@@ -62,7 +79,8 @@ def transmit_audio():
                 seq_number += 1
                 header = struct.pack('!QQ', seq_number, timestamp)
                 data, _ = stream.read(CHUNK_SIZE // 2)
-                packet = header + data
+                encoded_data = encoder.encode(data, CHUNK_SIZE // 2)
+                packet = header + encoded_data
                 sock.sendto(packet, (server_ip.get(), SERVER_PORT))
     except Exception as e:
         update_status(f"Eroare la transmitere: {e}")
@@ -82,8 +100,6 @@ def connect_to_server():
         sock.sendto(b'hello', (ip, SERVER_PORT))
         connected = True
         update_status(f"✅ Conectat la {ip} ({guess_network_type()})")
-
-        # Start receiving thread
         threading.Thread(target=receive_audio, daemon=True).start()
     except Exception as e:
         update_status(f"❌ Conectare eșuată: {e}")
@@ -93,9 +109,12 @@ def connect_to_server():
 def disconnect_from_server():
     global connected
     if connected and sock:
-        message = 'DISCONNECT:' + guess_network_type()
-        sock.sendto(message.encode('utf-8'), (server_ip.get(), SERVER_PORT))
-        sock.close()
+        try:
+            message = 'DISCONNECT:' + guess_network_type()
+            sock.sendto(message.encode('utf-8'), (server_ip.get(), SERVER_PORT))
+            sock.close()
+        except:
+            pass
         update_status("🔌 Deconectat.")
         connected = False
 
@@ -120,10 +139,8 @@ def on_closing():
     root.destroy()
 
 
-# GUI
-SERVER_PORT = 41234
+# Interfață grafică
 push_to_talk_btn_pressed = False
-
 root = tk.Tk()
 root.title("VoIP Client")
 root.geometry("400x250")
