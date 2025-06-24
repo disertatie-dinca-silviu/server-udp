@@ -34,6 +34,11 @@ server.on('message', (msg, rinfo) => {
   //const clientKey = `${rinfo.address}:${rinfo.port}`;
   const clientId = `${rinfo.address}:${rinfo.port}`; // identificare unică per client
 
+  if (!clients.has(clientId)) {
+    clients.set(clientId, { address: rinfo.address, port: rinfo.port });
+    console.log(`Client nou: ${rinfo.address}:${rinfo.port}`);
+  }
+  
   if (msg.toString().includes('DISCONNECT:')) {
     // Dacă clientul trimite un mesaj de deconectare, îl eliminăm
     if (clients.has(clientId)) {
@@ -70,7 +75,7 @@ server.on('message', (msg, rinfo) => {
 
 
    // Verificăm dacă e un pachet valid cu header de 16 bytes
-   if (msg.length < 16) {
+   if (msg.length < 16) { //e pingul 
     console.warn(`Pachet prea mic primit de la ${clientId}: ${msg.toString()}`);
     return;
   }
@@ -124,11 +129,6 @@ server.on('message', (msg, rinfo) => {
 
   lastPacket.set(seqNumber)
   
-  // Înregistrăm clientul dacă nu există
-  if (!clients.has(clientId)) {
-    clients.set(clientId, { address: rinfo.address, port: rinfo.port });
-    console.log(`Client nou: ${rinfo.address}:${rinfo.port}`);
-  }
   file.write(msg);
   for (const [key, client] of clients.entries()) {
     if (key !== clientId) {

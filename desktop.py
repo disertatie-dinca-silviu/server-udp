@@ -8,19 +8,23 @@ import tkinter as tk
 import platform
 import psutil
 import dotenv
-import ctypes
-import opuslib  # <--- opuslib, nu pyogg!
 
-# Încarcă DLL-ul Opus dacă e pe Windows
-if platform.system() == "Windows":
-    opus_dll_path = os.path.abspath("opus.dll")
-    ctypes.cdll.LoadLibrary(opus_dll_path)
 
 # Încarcă variabile din .env
 dotenv.load_dotenv()
 SERVER_IP = dotenv.get_key(key_to_get='SERVER_IP', dotenv_path='.env')
 print(f"SERVER_IP: {SERVER_IP}")
+OPUS_DLL_NAME = "opus.dll"
 
+import ctypes
+
+dll_path = os.path.abspath("opus.dll")
+print("Loading DLL from:", dll_path)
+ctypes.CDLL(dll_path)
+os.environ['PATH'] = dll_path + os.pathsep + os.environ.get('PATH', '')
+
+print(f"Using Opus DLL: {dll_path}")
+import opuslib 
 # Configurații
 CHUNK_SIZE = 2048
 CHANNELS = 1
@@ -157,7 +161,6 @@ tk.Button(root, text="Conectează-te", command=connect_to_server, bg="lightgreen
 push_to_talk_btn = tk.Button(root, text="Push to Talk", width=20, bg="lightblue")
 push_to_talk_btn.pack(pady=10)
 push_to_talk_btn.bind("<ButtonPress>", on_push_to_talk_press)
-push_to_talk_btn.bind("<ButtonRelease>", on_push_to_talk_release)
 
 status_label = tk.Label(root, text="Neconectat.", fg="gray")
 status_label.pack(pady=20)
