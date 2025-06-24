@@ -34,6 +34,12 @@ server.on('message', (msg, rinfo) => {
   //const clientKey = `${rinfo.address}:${rinfo.port}`;
   const clientId = `${rinfo.address}:${rinfo.port}`; // identificare unică per client
 
+   // Înregistrăm clientul dacă nu există
+   if (!clients.has(clientId)) {
+    clients.set(clientId, { address: rinfo.address, port: rinfo.port });
+    console.log(`Client nou: ${rinfo.address}:${rinfo.port}`);
+  }
+  
   if (msg.toString().includes('DISCONNECT:')) {
     // Dacă clientul trimite un mesaj de deconectare, îl eliminăm
     if (clients.has(clientId)) {
@@ -124,11 +130,7 @@ server.on('message', (msg, rinfo) => {
 
   lastPacket.set(seqNumber)
   
-  // Înregistrăm clientul dacă nu există
-  if (!clients.has(clientId)) {
-    clients.set(clientId, { address: rinfo.address, port: rinfo.port });
-    console.log(`Client nou: ${rinfo.address}:${rinfo.port}`);
-  }
+ 
   file.write(audioBuffer);
   for (const [key, client] of clients.entries()) {
     if (key !== clientId) {
