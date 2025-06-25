@@ -17,7 +17,10 @@ function writeStatsToCSV(stats) {
 
   // Verificăm dacă fișierul există, altfel scriem headerul
   const writeHeader = !fs.existsSync(filePath);
-  const line = `${stats.packetLoss},${stats.averageJitter},${stats.avgLatency},${stats.networkType}\n`;
+
+  //calculam numar clienti
+  const clientCount = clients.size;
+  const line = `${stats.packetLoss},${stats.averageJitter},${stats.avgLatency},${stats.networkType},${clientCount},${stats.stars}\n`;
 
   const header = 'PacketLoss(%),Jitter(ms),Latency(ms),NetworkType\n';
 
@@ -39,7 +42,7 @@ server.on('message', (msg, rinfo) => {
     clients.set(clientId, { address: rinfo.address, port: rinfo.port });
     console.log(`Client nou: ${rinfo.address}:${rinfo.port}`);
   }
-  
+
   if (msg.toString().includes('DISCONNECT:')) {
     // Dacă clientul trimite un mesaj de deconectare, îl eliminăm
     if (clients.has(clientId)) {
@@ -49,6 +52,8 @@ server.on('message', (msg, rinfo) => {
       const disconnectMessage = msg.toString().split(':')
 
       const networkType = disconnectMessage.at(1)
+      const stars = disconnectMessage.at(2) || 0;
+
       const jitters = jitterStats.get(clientId) || [];
       const averageJitter = jitters.reduce((a, b) => a + b, 0) / jitters.length;
 
@@ -57,17 +62,21 @@ server.on('message', (msg, rinfo) => {
 
       
       const packetLoss =  (clientData.lostPackets ?? 0 / clientData.receivedPackets) * 100;
-
+//calculam numar clienti
+const clientCount = clients.size;
       console.log(` - Packet Loss: ${packetLoss.toFixed(2)}%`);
       console.log(` - Avg Jitter: ${averageJitter.toFixed(2)} ms`);
       console.log(` - Avg Latency: ${avgLatency.toFixed(2)} ms`);
       console.log(` - Network: ${networkType}`);
+      console.log(` - clients: ${clientCount}`);
+      console.log(` - stars: ${stars}`);
 
       writeStatsToCSV({
         packetLoss: packetLoss.toFixed(2),
         averageJitter: averageJitter.toFixed(2),
         avgLatency: avgLatency.toFixed(2),
-        networkType
+        networkType,
+        stars,
       })
       clients.delete(clientId);
     }
