@@ -50,7 +50,7 @@ def receive_audio():
                     continue  # Pachet invalid sau doar header, ignoră
                 
                audio_dataaudio_data_bytes = compres.decode(data)
-               audio_data = np.frombuffer(audio_dataaudio_data_bytes, dtype=np.int16)
+               audio_data = np.frombuffer(audio_dataaudio_data_bytes, dtype=np.int16.astype('<i2'))
                stream.write(audio_data)
     except Exception as e:
         update_status(f"Eroare la recepție: {e}")
@@ -72,17 +72,20 @@ def transmit_audio():
                 seq_number += 1
                 header = struct.pack('!QQ', seq_number, timestamp)
                 
-                audio_chunk, overflowed = stream.read(CHUNK_SIZE)
+                audio_chunk, overflowed = stream.read(CHUNK_SIZE * 2)
                 if overflowed:
                     print("⚠️ Buffer overflow!")
                     continue
 
-                compressed_data = compres.encode(audio_chunk)
+                 # Convertim buffer-ul în numpy array
+                #print(f"audio_chunk type: {type(audio_chunk_bytes)}, dtype: {audio_chunk_bytes.dtype}, shape: {audio_chunk_bytes.shape}")
+                compressed_data = compres.encode(bytearray(audio_chunk))
                 print(f"Transmitting chunk of size {len(compressed_data)} bytes, seq: {seq_number}, timestamp: {timestamp}")
                 packet = header + compressed_data
                 sock.sendto(packet, (server_ip.get(), SERVER_PORT))
-                time.sleep(0.020)  # limităm puțin viteza de trimitere
+                time.sleep(0.050)  # limităm puțin viteza de trimitere
     except Exception as e:
+        print(f"Transmit error: {e}")
         update_status(f"Eroare la transmitere: {e}")
     finally:
         update_status("[🛑] Transmitere oprită.")
@@ -132,7 +135,9 @@ def on_push_to_talk_release(event=None):
 
 
 def update_status(message):
-    status_label.config(text=message)
+    def setter():
+        status_label.config(text=message)
+    root.after(0, setter)
 
 
 def on_closing():
@@ -154,6 +159,7 @@ def on_closing():
         disconnect_from_server(stars)
         rating_window.destroy()
         root.destroy()
+        
     stars_frame = tk.Frame(rating_window)
     stars_frame.pack()
     for i in range(1, 6):

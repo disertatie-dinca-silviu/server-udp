@@ -124,7 +124,6 @@ const clientCount = clients.size;
     //console.log(`Jitter mediu pentru ${clientId}: ${avgJitter.toFixed(2)} ms`);
   }
  
-
   const lastPacketOfThis = lastPacket.get(clientId)
   if (!lastPacketOfThis) {
     lastPacket.set(seqNumber);
@@ -139,7 +138,6 @@ const clientCount = clients.size;
 
   lastPacket.set(seqNumber)
   
- 
   file.write(audioBuffer);
   for (const [key, client] of clients.entries()) {
     if (key !== clientId) {
