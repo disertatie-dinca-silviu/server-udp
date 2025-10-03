@@ -12,16 +12,23 @@ import psutil
 import json
 import dotenv
 import compressor
+from vosk import Model, KaldiRecognizer
+import asyncio
+from websockets.asyncio.client import connect
+import uuid
 
 # Load environment variables        
-
 CHUNK_SIZE = 2048
 CHANNELS = 1
 SAMPLE_RATE = 16000
-
+WEBSOCKET_ID = None
+# Încarcă modelul (doar o dată, la startup)
+model = Model("vosk-model-small-en-us-0.15")
+recognizer = KaldiRecognizer(model, SAMPLE_RATE)
 sock = None
 connected = False
 SERVER_IP = dotenv.get_key(key_to_get='SERVER_IP', dotenv_path='.env')
+WEBSOCKET_SERVER_IP = dotenv.get_key(key_to_get='SERVER_WEBSOCKET', dotenv_path='.env')
 compres = compressor.Compressor()
 print(f"SERVER_IP: {SERVER_IP}")
 
@@ -68,14 +75,19 @@ def transmit_audio():
             update_status("[🎙️] Transmitere activă...")
             while push_to_talk_btn_pressed:
                 print("Transmit loop running...")
+                ws_uuid = uuid.UUID(WEBSOCKET_ID)
+                ws_id_bytes = ws_uuid.bytes  # 16 bytes
                 timestamp = int(time.time() * 1000)
                 seq_number += 1
-                header = struct.pack('!QQ', seq_number, timestamp)
+                header = struct.pack('!QQ', seq_number, timestamp) + ws_id_bytes
                 
                 audio_chunk, overflowed = stream.read(CHUNK_SIZE * 2)
                 if overflowed:
                     print("⚠️ Buffer overflow!")
                     continue
+                # Conversie în bytes
+                audio_transcript = transcript_audio_chunk(audio_chunk)
+                print(f'audio_transcript: {audio_transcript}')
 
                  # Convertim buffer-ul în numpy array
                 #print(f"audio_chunk type: {type(audio_chunk_bytes)}, dtype: {audio_chunk_bytes.dtype}, shape: {audio_chunk_bytes.shape}")
@@ -89,6 +101,30 @@ def transmit_audio():
         update_status(f"Eroare la transmitere: {e}")
     finally:
         update_status("[🛑] Transmitere oprită.")
+
+def transcript_audio_chunk(audio_chunk) -> str:
+    audio_bytes = bytes(audio_chunk)
+                
+    if recognizer.AcceptWaveform(audio_bytes):
+        result = json.loads(recognizer.Result())
+        return result.get("text", "")
+    else:
+        partial = json.loads(recognizer.PartialResult())
+        return partial.get("partial", "")
+
+def send_trough_websocket(message: str):
+    pass
+
+async def connect_to_websocket_server():
+    global WEBSOCKET_ID
+    print(WEBSOCKET_SERVER_IP)
+    async with connect(WEBSOCKET_SERVER_IP) as websocket:
+        await websocket.send(json.dumps({ 'type': 'CONN'}))
+        message = await websocket.recv()
+        data = json.loads(message)
+        print(f'websocket id received: ${data}')
+        WEBSOCKET_ID = data['id']
+        print(WEBSOCKET_ID)
 
 
 def connect_to_server():
@@ -169,9 +205,11 @@ def on_closing():
 
     rating_window.protocol("WM_DELETE_WINDOW", lambda: None)  # prevenim închiderea fără rating
 
+# 
 
-# GUI
 SERVER_PORT = 41234
+
+
 push_to_talk_btn_pressed = False
 
 root = tk.Tk()
@@ -196,4 +234,5 @@ status_label = tk.Label(root, text="Neconectat.", fg="gray")
 status_label.pack(pady=20)
 
 root.protocol("WM_DELETE_WINDOW", on_closing)
+asyncio.run(connect_to_websocket_server())
 root.mainloop()

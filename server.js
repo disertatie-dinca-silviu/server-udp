@@ -1,7 +1,10 @@
-const dgram = require('dgram');
-const fs = require('fs');
+import dgram from 'dgram';
+import fs from 'fs';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { WebSocketServer } from 'ws';
+import { parse as uuidParse, stringify as uuidStringify } from 'uuid';
 
-const path = require('path')
 const server = dgram.createSocket('udp4');
 const file = fs.createWriteStream('output.pcm', { flags: 'a' });
 
@@ -11,6 +14,7 @@ const jitterStats = new Map();
 const lastPacket = new Map();
 const clientData = {}
 const clientOffset = new Map(); // clientId => offset
+const clientUdpToWebSocket = new Map()
 
 function writeStatsToCSV(stats) {
   const filePath = path.join(__dirname, 'client_stats.csv');
@@ -36,13 +40,7 @@ function writeStatsToCSV(stats) {
 server.on('message', (msg, rinfo) => {
   //const clientKey = `${rinfo.address}:${rinfo.port}`;
   const clientId = `${rinfo.address}:${rinfo.port}`; // identificare unică per client
-
-   // Înregistrăm clientul dacă nu există
-   if (!clients.has(clientId)) {
-    clients.set(clientId, { address: rinfo.address, port: rinfo.port });
-    console.log(`Client nou: ${rinfo.address}:${rinfo.port}`);
-  }
-
+  
   if (msg.toString().includes('DISCONNECT:')) {
     // Dacă clientul trimite un mesaj de deconectare, îl eliminăm
     if (clients.has(clientId)) {
@@ -89,10 +87,23 @@ const clientCount = clients.size;
     console.warn(`Pachet prea mic primit de la ${clientId}: ${msg.toString()}`);
     return;
   }
+  
+  // buffer are 16 bytes
+  const wsIdBuffer = msg.slice(16, 32);
+  const webSocketClientId = uuidStringify(wsIdBuffer);  // devine string normal UUID
+
+   // Înregistrăm clientul dacă nu există
+   if (!clients.has(clientId)) {
+    clients.set(clientId, { address: rinfo.address, port: rinfo.port });
+    clientUdpToWebSocket.set(clientId, webSocketClientId)
+    console.log(`Client nou: ${rinfo.address}:${rinfo.port} si websocket id : ${webSocketClientId}`);
+  }
+
+
  
   const seqNumber = msg.readBigUInt64BE(0);    // de la byte 0 la 7
   const timestamp = msg.readBigUInt64BE(8);    // de la byte 8 la 15
-  const audioBuffer = msg.slice(16);            // restul e audio raw
+  const audioBuffer = msg.slice(32);            // restul e audio raw
 
   clientData.receivedPackets = (clientData.receivedPackets || 0) + 1;
 
@@ -154,5 +165,42 @@ server.on('listening', () => {
   const address = server.address();
   console.log(`Server UDP ascultă pe ${address.address}:${address.port}`);
 });
+
+
+
+// Create a WebSocket server on port 8080
+const wss = new WebSocketServer({ port: 8080 });
+
+
+// Connection event handler
+wss.on('connection', (ws) => {
+  console.log('New client connected');
+  
+  // Send a welcome message to the client
+
+
+  // Message event handler
+  ws.on('message', (message) => {
+    console.log(`Received: ${message}`);
+    const messageObject = JSON.parse(message)
+    if (messageObject.type === 'CONN') {
+        // Echo the message back to the client
+        const newUserId = generateUserId()
+        ws.send(JSON.stringify({
+          id: newUserId.toString()
+        }));
+    }
+   
+  });
+
+  // Close event handler
+  ws.on('close', () => {
+    console.log('Client disconnected');
+  });
+});
+
+function  generateUserId() {
+  return uuidv4()
+}
 
 server.bind(41234); // port implicit, îl poți schimba
