@@ -17,7 +17,7 @@ const clientOffset = new Map(); // clientId => offset
 const clientUdpToWebSocket = new Map()
 
 function writeStatsToCSV(stats) {
-  const filePath = path.join(__dirname, 'client_stats.csv');
+  const filePath = 'client_stats.csv';
 
   // Verificăm dacă fișierul există, altfel scriem headerul
   const writeHeader = !fs.existsSync(filePath);
