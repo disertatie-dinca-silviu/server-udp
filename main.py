@@ -21,7 +21,7 @@ import csv
 from pathlib import Path
 from typing import Dict, Tuple, List
 from collections import defaultdict
-
+from pprint import pprint
 import websockets  # pip install websockets
 
 # -------------------- Config --------------------
@@ -251,11 +251,66 @@ async def ws_handler(websocket):
                 print(f"Assigned WS id {new_id} to {peer}")
             
             if msg.get("type") == "MSG":
-                print(f"Client ${msg.get("sender_id")} sent message ${msg.get("data")}")
+                print(f"Client ${msg.get("sender_id")} sent message ${msg.get("data")}. Check toxicity")
+                await checkWordsToxicity(msg.get('sender_id'), msg.get('data'))
+
+
     except websockets.ConnectionClosed:
         print("WS connection closed:", peer)
     except Exception as e:
         print("WS handler error:", e)
+
+#--------------------- Chreck word toxicity----------------------#
+
+async def checkWordsToxicity(sender_id, data):
+    toxicity_score = await check_toxicity(data)
+    pprint(f'toxicity score is : {toxicity_score}')
+
+import aiohttp
+import asyncio
+import time
+
+TOXICITY_API_URL = "http://localhost:8000"  # schimbă cu URL-ul tău
+
+async def check_toxicity(text: str, timeout=3.0, max_retries=3, backoff_base=0.5):
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "text": text,
+        "threshold": 0.5
+    }
+
+    attempt = 0
+    while attempt < max_retries:
+        attempt += 1
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(TOXICITY_API_URL+'/check', json=payload, headers=headers, timeout=timeout) as resp:
+                    # status handling
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return data
+                    elif resp.status in (429, 503):
+                        # rate limit / service busy -> backoff and retry
+                        await asyncio.sleep(backoff_base * (2 ** (attempt-1)))
+                        continue
+                    else:
+                        # unexpected status -> read body for debug
+                        text_body = await resp.text()
+                        print(f"[TOXIC] Unexpected status {resp.status}: {text_body}")
+                        return None
+        except asyncio.TimeoutError:
+            print(f"[TOXIC] Timeout on attempt {attempt}")
+            await asyncio.sleep(backoff_base * (2 ** (attempt-1)))
+        except Exception as e:
+            print(f"[TOXIC] Network error: {e}")
+            await asyncio.sleep(backoff_base * (2 ** (attempt-1)))
+
+    print("[TOXIC] All retries failed")
+    return None
 
 
 # -------------------- Bootstrap --------------------
