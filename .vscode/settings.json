@@ -1,0 +1,5 @@
+{
+    "python.analysis.typeCheckingMode": "strict",
+    "python.analysis.autoSearchPaths": true,
+    "pydantic.strict": true  // Dacă ai Pydantic v2
+}

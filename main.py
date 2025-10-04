@@ -19,10 +19,13 @@ import uuid
 import json
 import csv
 from pathlib import Path
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, cast
 from collections import defaultdict
 from pprint import pprint
 import websockets  # pip install websockets
+from sympy.abc import lamda
+
+from models import ToxicityResponse  # Importă doar clasa de care ai nevoie
 
 # -------------------- Config --------------------
 UDP_HOST = "0.0.0.0"
@@ -53,6 +56,9 @@ client_offset: Dict[str, float] = {}
 # client packet counters for packet loss
 client_data: Dict[str, Dict[str, int]] = defaultdict(lambda: {"receivedPackets": 0, "lostPackets": 0})
 
+# client language score
+client_language_score: Dict[str, int] = defaultdict(lambda: 100) #each client starts with 100 score
+MAX_LANGUAGE_SCORE = 100
 
 # -------------------- Utilities --------------------
 def generate_user_id() -> str:
@@ -89,6 +95,7 @@ class VoipUdpProtocol(asyncio.DatagramProtocol):
         Called when UDP packet is received.
         addr is (ip, port)
         """
+        global MAX_LANGUAGE_SCORE
         ip, port = addr
         client_key = f"{ip}:{port}"
 
@@ -127,6 +134,7 @@ class VoipUdpProtocol(asyncio.DatagramProtocol):
         if client_key not in clients:
             clients[client_key] = (ip, port)
             client_udp_to_ws[client_key] = ws_uuid
+            client_language_score.setdefault(ws_uuid, MAX_LANGUAGE_SCORE)
             print(f"Client nou: {client_key} -> WS_ID {ws_uuid}")
 
         # increment received packets
@@ -233,6 +241,7 @@ async def ws_handler(websocket):
     """
     websocket is a websockets.server.WebSocketServerProtocol
     """
+    global client_language_score
     peer = websocket.remote_address
     print("New WS connection from", peer)
     try:
@@ -251,8 +260,10 @@ async def ws_handler(websocket):
                 print(f"Assigned WS id {new_id} to {peer}")
             
             if msg.get("type") == "MSG":
-                print(f"Client ${msg.get("sender_id")} sent message ${msg.get("data")}. Check toxicity")
-                await checkWordsToxicity(msg.get('sender_id'), msg.get('data'))
+                print(f"Client ${msg.get("sender_id")} sent message {msg.get("data")}. Check toxicity")
+                toxicityScore: ToxicityResponse = cast(ToxicityResponse, await checkWordsToxicity(msg.get('data')))
+                pprint(toxicityScore)
+                updateUserScoreIfNeeded(toxicityScore, msg.get("sender_id"))
 
 
     except websockets.ConnectionClosed:
@@ -262,10 +273,19 @@ async def ws_handler(websocket):
 
 #--------------------- Chreck word toxicity----------------------#
 
-async def checkWordsToxicity(sender_id, data):
+async def checkWordsToxicity(data) -> ToxicityResponse:
     toxicity_score = await check_toxicity(data)
-    pprint(f'toxicity score is : {toxicity_score}')
+    toxicity = ToxicityResponse.model_validate(toxicity_score)
+    return toxicity
 
+def updateUserScoreIfNeeded(toxic_score: ToxicityResponse, user_id: str):
+    if (toxic_score.toxic_labels.__len__() >= 2):
+        toxic_labels_names = list(map(lambda x: x.label, toxic_score.toxic_labels))
+        number_of_toxic = len(toxic_labels_names)
+        client_language_score[user_id] = client_language_score.get(user_id, 0) - number_of_toxic * 10;
+        print(f'we decresease langauge score of {user_id} with {number_of_toxic*10} points because his language was classified as {toxic_labels_names}')
+        #trimitem noul language_score la client ca sa vada ce se intampla
+        
 import aiohttp
 import asyncio
 import time
