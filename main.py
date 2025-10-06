@@ -25,6 +25,7 @@ from pprint import pprint
 import websockets  # pip install websockets
 from sympy.abc import lamda
 
+
 from models import ToxicityResponse  # Importă doar clasa de care ai nevoie
 
 # -------------------- Config --------------------
@@ -263,7 +264,12 @@ async def ws_handler(websocket):
                 print(f"Client ${msg.get("sender_id")} sent message {msg.get("data")}. Check toxicity")
                 toxicityScore: ToxicityResponse = cast(ToxicityResponse, await checkWordsToxicity(msg.get('data')))
                 pprint(toxicityScore)
-                updateUserScoreIfNeeded(toxicityScore, msg.get("sender_id"))
+                isScoreUpdated = updateUserScoreIfNeeded(toxicityScore, msg.get("sender_id"))
+                number_of_toxic = len(toxicityScore.toxic_labels)
+                toxic_labels_names = list(map(lambda x: x.label, toxicityScore.toxic_labels))
+                message = f'we decresease langauge score of {msg.get("sender_id")} with {number_of_toxic * 10} points because his language was classified as {toxic_labels_names}'
+                if isScoreUpdated:
+                   await sendScoreUpdateMessage(websocket, toxicityScore, msg.get("sender_id"), message)
 
 
     except websockets.ConnectionClosed:
@@ -279,13 +285,35 @@ async def checkWordsToxicity(data) -> ToxicityResponse:
     return toxicity
 
 def updateUserScoreIfNeeded(toxic_score: ToxicityResponse, user_id: str):
+    global client_language_score
     if (toxic_score.toxic_labels.__len__() >= 2):
         toxic_labels_names = list(map(lambda x: x.label, toxic_score.toxic_labels))
         number_of_toxic = len(toxic_labels_names)
         client_language_score[user_id] = client_language_score.get(user_id, 0) - number_of_toxic * 10;
-        print(f'we decresease langauge score of {user_id} with {number_of_toxic*10} points because his language was classified as {toxic_labels_names}')
         #trimitem noul language_score la client ca sa vada ce se intampla
-        
+        return True
+    return False
+
+async def sendScoreUpdateMessage(websocket, toxic_score: ToxicityResponse, user_id: str, message: str):
+    messageToSend = buildScoreUpdateMessage(toxic_score, user_id, message)
+    try:
+        await websocket.send(json.dumps(messageToSend))
+        await asyncio.sleep(3)
+        pprint(f'message {messageToSend} sent success')
+    except Exception as e:
+        print(e)
+
+def buildScoreUpdateMessage(toxicity_score: ToxicityResponse, user_id: str, message: str):
+    global client_language_score
+    return {
+        'type': 'WARN',
+        'message': message,
+        'toxicity_labels': list(map(lambda x: x.label, toxicity_score.toxic_labels)),
+        'sender_id': user_id,
+        'actual_score': client_language_score.get(user_id, 100)
+    }
+
+
 import aiohttp
 import asyncio
 import time
