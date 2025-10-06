@@ -264,6 +264,8 @@ async def ws_handler(websocket):
                 print(f"Client ${msg.get("sender_id")} sent message {msg.get("data")}. Check toxicity")
                 toxicityScore: ToxicityResponse = cast(ToxicityResponse, await checkWordsToxicity(msg.get('data')))
                 pprint(toxicityScore)
+                #must check if message was already scored in the last 
+                
                 isScoreUpdated = updateUserScoreIfNeeded(toxicityScore, msg.get("sender_id"))
                 number_of_toxic = len(toxicityScore.toxic_labels)
                 toxic_labels_names = list(map(lambda x: x.label, toxicityScore.toxic_labels))
@@ -289,7 +291,7 @@ def updateUserScoreIfNeeded(toxic_score: ToxicityResponse, user_id: str):
     if (toxic_score.toxic_labels.__len__() >= 2):
         toxic_labels_names = list(map(lambda x: x.label, toxic_score.toxic_labels))
         number_of_toxic = len(toxic_labels_names)
-        client_language_score[user_id] = client_language_score.get(user_id, 0) - number_of_toxic * 10;
+        client_language_score[user_id] = client_language_score.get(user_id, 100) - number_of_toxic * 10;
         #trimitem noul language_score la client ca sa vada ce se intampla
         return True
     return False
