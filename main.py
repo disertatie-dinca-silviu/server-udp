@@ -18,6 +18,8 @@ import struct
 import uuid
 import json
 import csv
+import requests
+import threading
 from pathlib import Path
 from typing import Dict, Tuple, List, cast
 from collections import defaultdict
@@ -66,6 +68,17 @@ connected_ws_clients = set()
 
 METRICS_FILE = Path("server_metrics.csv")
 
+
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSe85K57lAQZ8FTphV6wdH333306b9qn6ofAkujMpO2OlIzJ5bmdBTfdJIqGBKSmD-/exec"
+
+def log_to_webhook_thread(payload):
+    try:
+        # Trimitem datele la Google
+        response = requests.post(APPS_SCRIPT_URL, json=payload)
+        print(f"[WEBHOOK] Răspuns Google: {response.text}")
+    except Exception as e:
+        print(f"[WEBHOOK] Eroare: {e}")
+
 # ### [MODIFICARE] Funcție nouă pentru logarea metricilor de performanță
 def log_server_metrics(latency_ms, user_id):
     """
@@ -85,6 +98,16 @@ def log_server_metrics(latency_ms, user_id):
         if not file_exists:
             writer.writerow(["Timestamp", "Sender_ID", "Latency_MS", "Active_Users", "CPU_Load_%"])
         writer.writerow(row)
+
+    payload = {
+        "timestamp": timestamp_str,
+        "sender_id": user_id,
+        "latency": latency_ms,
+        "active_users": active_users,
+        "cpu_load": cpu_load,
+    }
+    # Trimitem "Fire and Forget"
+    threading.Thread(target=log_to_webhook_thread, args=(payload,)).start()
     
     print(f"[METRICS] Salvat: {row}")
 
