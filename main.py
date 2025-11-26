@@ -24,7 +24,7 @@ from collections import defaultdict
 from pprint import pprint
 import websockets  # pip install websockets
 from sympy.abc import lamda
-
+import psutil  # ### [MODIFICARE] Necesită pip install psutil
 
 from models import ToxicityResponse  # Importă doar clasa de care ai nevoie
 
@@ -60,6 +60,33 @@ client_data: Dict[str, Dict[str, int]] = defaultdict(lambda: {"receivedPackets":
 # client language score
 client_language_score: Dict[str, int] = defaultdict(lambda: 100) #each client starts with 100 score
 MAX_LANGUAGE_SCORE = 100
+
+# ### [MODIFICARE] Set pentru a număra utilizatorii conectați la WebSocket
+connected_ws_clients = set()
+
+METRICS_FILE = Path("server_metrics.csv")
+
+# ### [MODIFICARE] Funcție nouă pentru logarea metricilor de performanță
+def log_server_metrics(latency_ms, user_id):
+    """
+    Scrie un rând în CSV cu: Timestamp, Latency, CPU Load, Active Users
+    """
+    # 1. Capturăm metricile serverului
+    cpu_load = psutil.cpu_percent(interval=None) # Instantaneu
+    active_users = len(connected_ws_clients) # Câți sunt conectați acum
+    timestamp_str = time.strftime("%H:%M:%S")
+    
+    row = [timestamp_str, user_id, latency_ms, active_users, cpu_load]
+    
+    # 2. Scriem în fișier
+    file_exists = METRICS_FILE.exists()
+    with METRICS_FILE.open("a", newline="") as f:
+        writer = csv.writer(f)
+        if not file_exists:
+            writer.writerow(["Timestamp", "Sender_ID", "Latency_MS", "Active_Users", "CPU_Load_%"])
+        writer.writerow(row)
+    
+    print(f"[METRICS] Salvat: {row}")
 
 # -------------------- Utilities --------------------
 def generate_user_id() -> str:
@@ -259,9 +286,19 @@ async def ws_handler(websocket):
                 resp = {"type": "ID", "id": new_id}
                 await websocket.send(json.dumps(resp))
                 print(f"Assigned WS id {new_id} to {peer}")
+                connected_ws_clients.add(new_id)
             
+            if msg.get("type") == "LOG_LATENCY":
+                latency = msg.get('latency')
+                user_id = msg.get('sender_id')
+                
+                # Logăm performanța
+                log_server_metrics(latency, user_id)
+
             if msg.get("type") == "MSG":
                 print(f"Client ${msg.get("sender_id")} sent message {msg.get("data")}. Check toxicity")
+                # ### [MODIFICARE] Extragem timestamp-ul clientului (T0)
+                client_ts = msg.get("client_ts")
                 toxicityScore: ToxicityResponse = cast(ToxicityResponse, await checkWordsToxicity(msg.get('data')))
                 pprint(toxicityScore)
                 #must check if message was already scored in the last 
@@ -271,7 +308,7 @@ async def ws_handler(websocket):
                 toxic_labels_names = list(map(lambda x: x.label, toxicityScore.toxic_labels))
                 message = f'we decresease langauge score of {msg.get("sender_id")} with {number_of_toxic * 10} points because his language was classified as {toxic_labels_names}'
                 if isScoreUpdated:
-                   await sendScoreUpdateMessage(websocket, toxicityScore, msg.get("sender_id"), message)
+                   await sendScoreUpdateMessage(websocket, toxicityScore, msg.get("sender_id"), message, client_ts)
 
 
     except websockets.ConnectionClosed:
@@ -296,23 +333,26 @@ def updateUserScoreIfNeeded(toxic_score: ToxicityResponse, user_id: str):
         return True
     return False
 
-async def sendScoreUpdateMessage(websocket, toxic_score: ToxicityResponse, user_id: str, message: str):
-    messageToSend = buildScoreUpdateMessage(toxic_score, user_id, message)
+# ### [MODIFICARE] Adăugat parametrul origin_ts
+async def sendScoreUpdateMessage(websocket, toxic_score: ToxicityResponse, user_id: str, message: str, origin_ts=None):
+    messageToSend = buildScoreUpdateMessage(toxic_score, user_id, message, origin_ts)
     try:
         await websocket.send(json.dumps(messageToSend))
-        await asyncio.sleep(3)
-        pprint(f'message {messageToSend} sent success')
+        # await asyncio.sleep(3) # Am scos sleep-ul artificial ca să nu stricăm latența
+        print(f'WARN sent to {user_id}')
     except Exception as e:
         print(e)
 
-def buildScoreUpdateMessage(toxicity_score: ToxicityResponse, user_id: str, message: str):
+# ### [MODIFICARE] Adăugat parametrul origin_ts
+def buildScoreUpdateMessage(toxicity_score: ToxicityResponse, user_id: str, message: str, origin_ts=None):
     global client_language_score
     return {
         'type': 'WARN',
         'message': message,
         'toxicity_labels': list(map(lambda x: x.label, toxicity_score.toxic_labels)),
         'sender_id': user_id,
-        'actual_score': client_language_score.get(user_id, 100)
+        'actual_score': client_language_score.get(user_id, 100),
+        'origin_ts': origin_ts # <--- RETURNĂM TIMPUL
     }
 
 
