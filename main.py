@@ -90,7 +90,7 @@ connected_ws_clients = set()
 
 METRICS_FILE = Path("server_metrics.csv")
 
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxhCsdgHbFVyppPyQkHivR0neqEiHZ2KFb2ZgvsYWE8MU2u26LZXCuVxRL2oToXl34-/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-JDuansk6wwoF1MIkIwSSQQPPno5pcnNlksUHxSKGl4OSDtPgaB1Qoe55zGfmrp1A/exec"
 
 def log_to_webhook_thread(payload):
     try:
@@ -127,6 +127,7 @@ def log_server_metrics(latency_ms, user_id):
         "latency": latency_ms,
         "active_users": active_users,
         "cpu_load": cpu_load,
+        "is_moderation_enabled": ENABLE_MODERATION, 
     }
     # Trimitem "Fire and Forget"
     threading.Thread(target=log_to_webhook_thread, args=(payload,)).start()
