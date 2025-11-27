@@ -1,0 +1,16 @@
+# ---------------- Configurare Rețea (Network) ----------------
+# Folosim 0.0.0.0 pentru a permite conexiuni din exterior (esențial pe VPS)
+UDP_HOST=0.0.0.0
+UDP_PORT=41234
+
+WS_HOST=0.0.0.0
+WS_PORT=8081
+
+# ---------------- Configurare Experiment Disertație ----------------
+# Comutator pentru activarea/dezactivarea moderării AI (BERT)
+# Pune 1 (sau true) -> Pentru testul FINAL (Scenariul Propus - Consum CPU mare)
+# Pune 0 (sau false) -> Pentru testul BASELINE (Fără moderare - Consum CPU mic)
+ENABLE_MODERATION=0
+
+# (Opțional) URL-ul către microserviciul de toxicitate (dacă e separat)
+TOXICITY_API_URL=http://localhost:8000

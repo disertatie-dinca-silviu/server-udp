@@ -29,12 +29,34 @@ from sympy.abc import lamda
 import psutil  # ### [MODIFICARE] Necesită pip install psutil
 
 from models import ToxicityResponse  # Importă doar clasa de care ai nevoie
+from dotenv import load_dotenv
+import os
+
+# 1. Încarcă variabilele din fișierul .env
+load_dotenv()
+
+def get_bool_env(var_name, default=False):
+    value = os.getenv(var_name, str(default)).lower()
+    return value in ["1", "true", "yes", "on"]
 
 # -------------------- Config --------------------
-UDP_HOST = "0.0.0.0"
-UDP_PORT = 41234
-WS_HOST = "0.0.0.0"
-WS_PORT = 8081
+# 3. Citire Configurație
+UDP_HOST = os.getenv("UDP_HOST", "0.0.0.0")
+UDP_PORT = int(os.getenv("UDP_PORT", 41234)) # Conversie obligatorie la int!
+
+WS_HOST = os.getenv("WS_HOST", "0.0.0.0")
+WS_PORT = int(os.getenv("WS_PORT", 8081))    # Conversie obligatorie la int!
+
+# Aici e "întrerupătorul" tău pentru Disertație
+ENABLE_MODERATION = get_bool_env("ENABLE_MODERATION", default=True)
+
+# --- Afișare Status la Pornire ---
+print("-" * 30)
+print(f"🚀 Server Started")
+print(f"📡 UDP Listening on: {UDP_HOST}:{UDP_PORT}")
+print(f"💬 WebSocket on:     {WS_HOST}:{WS_PORT}")
+print(f"🧠 AI Moderation:    {'✅ ENABLED' if ENABLE_MODERATION else '❌ DISABLED (Baseline Mode)'}")
+print("-" * 30)
 
 OUTPUT_FILE = Path("output.pcm")
 STATS_FILE = Path("client_stats.csv")
@@ -322,17 +344,19 @@ async def ws_handler(websocket):
                 print(f"Client ${msg.get("sender_id")} sent message {msg.get("data")}. Check toxicity")
                 # ### [MODIFICARE] Extragem timestamp-ul clientului (T0)
                 client_ts = msg.get("client_ts")
-                toxicityScore: ToxicityResponse = cast(ToxicityResponse, await checkWordsToxicity(msg.get('data')))
-                pprint(toxicityScore)
-                #must check if message was already scored in the last 
-                
-                isScoreUpdated = updateUserScoreIfNeeded(toxicityScore, msg.get("sender_id"))
-                number_of_toxic = len(toxicityScore.toxic_labels)
-                toxic_labels_names = list(map(lambda x: x.label, toxicityScore.toxic_labels))
-                message = f'we decresease langauge score of {msg.get("sender_id")} with {number_of_toxic * 10} points because his language was classified as {toxic_labels_names}'
-                if isScoreUpdated:
-                   await sendScoreUpdateMessage(websocket, toxicityScore, msg.get("sender_id"), message, client_ts)
 
+                if ENABLE_MODERATION: 
+                    toxicityScore: ToxicityResponse = cast(ToxicityResponse, await checkWordsToxicity(msg.get('data')))
+                    pprint(toxicityScore)
+                    #must check if message was already scored in the last
+                    isScoreUpdated = updateUserScoreIfNeeded(toxicityScore, msg.get("sender_id"))
+                    number_of_toxic = len(toxicityScore.toxic_labels)
+                    toxic_labels_names = list(map(lambda x: x.label, toxicityScore.toxic_labels))
+                    message = f'we decresease langauge score of {msg.get("sender_id")} with {number_of_toxic * 10} points because his language was classified as {toxic_labels_names}'
+                    if isScoreUpdated:
+                        await sendScoreUpdateMessage(websocket, toxicityScore, msg.get("sender_id"), message, client_ts)
+                else:
+                    print("Moderation DISABLED. Skipping check.")
 
     except websockets.ConnectionClosed:
         print("WS connection closed:", peer)
@@ -383,7 +407,7 @@ import aiohttp
 import asyncio
 import time
 
-TOXICITY_API_URL = "http://localhost:8000"  # schimbă cu URL-ul tău
+TOXICITY_API_URL = os.getenv("TOXICITY_API_URL", "http://localhost:8000")
 
 async def check_toxicity(text: str, timeout=3.0, max_retries=3, backoff_base=0.5):
     headers = {
