@@ -91,7 +91,7 @@ connected_ws_clients = set()
 METRICS_FILE = Path("server_metrics.csv")
 
 
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzSe85K57lAQZ8FTphV6wdH333306b9qn6ofAkujMpO2OlIzJ5bmdBTfdJIqGBKSmD-/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwUaQ-S2fqlocdhOH5qsaW0Cu4zvBotZKyeJ_r-vD5RokkeyWtywM04BahjZm1gEU7F/exec"
 
 def log_to_webhook_thread(payload):
     try:
@@ -122,6 +122,7 @@ def log_server_metrics(latency_ms, user_id):
         writer.writerow(row)
 
     payload = {
+        'type': 'PERFORMANCE_METRIC',
         "timestamp": timestamp_str,
         "sender_id": user_id,
         "latency": latency_ms,
@@ -142,6 +143,18 @@ def write_stats_to_csv(packet_loss: float, avg_jitter: float, avg_latency: float
     header = ["PacketLoss(%)", "Jitter(ms)", "Latency(ms)", "NetworkType", "Clients", "Stars"]
     write_header = not STATS_FILE.exists()
     line = [f"{packet_loss:.2f}", f"{avg_jitter:.2f}", f"{avg_latency:.2f}", network_type, str(len(clients)), str(stars)]
+    
+    payload = {
+        'type': 'DISCONNECT_STATS',
+        'packet_loss': packet_loss,
+        'avg_jitter': avg_jitter,
+        'avg_latency': avg_latency,
+        'network_type': network_type,
+        'clients': clients,
+        'stars': stars,
+    }
+
+    threading.Thread(target=log_to_webhook_thread, args=(payload,)).start()
 
     mode = "a"
     with STATS_FILE.open(mode, newline="") as csvfile:
