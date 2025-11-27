@@ -153,6 +153,7 @@ def write_stats_to_csv(packet_loss: float, avg_jitter: float, avg_latency: float
         'clients': clients,
         'stars': stars,
         'cpu_load': cpu_load,
+        'is_moderation_enabled': ENABLE_MODERATION
     }
 
     threading.Thread(target=log_to_webhook_thread, args=(payload,)).start()
