@@ -27,6 +27,7 @@ from pprint import pprint
 import websockets  # pip install websockets
 from sympy.abc import lamda
 import psutil  # ### [MODIFICARE] Necesită pip install psutil
+from typing import Set, Any
 
 from models import ToxicityResponse  # Importă doar clasa de care ai nevoie
 from dotenv import load_dotenv
@@ -86,7 +87,7 @@ client_language_score: Dict[str, int] = defaultdict(lambda: 100) #each client st
 MAX_LANGUAGE_SCORE = 100
 
 # ### [MODIFICARE] Set pentru a număra utilizatorii conectați la WebSocket
-connected_ws_clients = set()
+connected_ws_clients: Set[Any] = set()
 
 METRICS_FILE = Path("server_metrics.csv")
 
@@ -315,7 +316,9 @@ class VoipUdpProtocol(asyncio.DatagramProtocol):
 
         # cleanup
         clients.pop(client_key, None)
+        connected_ws_clients.discard(client_udp_to_ws.get(client_key))
         client_udp_to_ws.pop(client_key, None)
+
         latency_stats.pop(client_key, None)
         jitter_stats.pop(client_key, None)
         last_packet.pop(client_key, None)
