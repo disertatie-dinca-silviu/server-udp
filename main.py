@@ -90,8 +90,7 @@ connected_ws_clients = set()
 
 METRICS_FILE = Path("server_metrics.csv")
 
-
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwUaQ-S2fqlocdhOH5qsaW0Cu4zvBotZKyeJ_r-vD5RokkeyWtywM04BahjZm1gEU7F/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxhCsdgHbFVyppPyQkHivR0neqEiHZ2KFb2ZgvsYWE8MU2u26LZXCuVxRL2oToXl34-/exec"
 
 def log_to_webhook_thread(payload):
     try:
@@ -144,6 +143,7 @@ def write_stats_to_csv(packet_loss: float, avg_jitter: float, avg_latency: float
     write_header = not STATS_FILE.exists()
     line = [f"{packet_loss:.2f}", f"{avg_jitter:.2f}", f"{avg_latency:.2f}", network_type, str(len(clients)), str(stars)]
     
+    cpu_load = psutil.cpu_percent(interval=None) # Instantaneu
     payload = {
         'type': 'DISCONNECT_STATS',
         'packet_loss': packet_loss,
@@ -152,6 +152,7 @@ def write_stats_to_csv(packet_loss: float, avg_jitter: float, avg_latency: float
         'network_type': network_type,
         'clients': clients,
         'stars': stars,
+        'cpu_load': cpu_load,
     }
 
     threading.Thread(target=log_to_webhook_thread, args=(payload,)).start()
