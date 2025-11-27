@@ -34,7 +34,7 @@ from models import ToxicityResponse  # Importă doar clasa de care ai nevoie
 UDP_HOST = "0.0.0.0"
 UDP_PORT = 41234
 WS_HOST = "0.0.0.0"
-WS_PORT = 8080
+WS_PORT = 8081
 
 OUTPUT_FILE = Path("output.pcm")
 STATS_FILE = Path("client_stats.csv")
