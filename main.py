@@ -208,7 +208,7 @@ class VoipUdpProtocol(asyncio.DatagramProtocol):
             seq_number = struct.unpack_from("!Q", data, 0)[0]           # 0..7
             timestamp = struct.unpack_from("!Q", data, 8)[0]            # 8..15
             ws_id_bytes = data[16:32]                                   # 16..31 (16 bytes)
-            audio_buffer = data[32:]                                    # rest
+            audio_buffer = data                                    # rest
         except Exception as e:
             print("Eroare parsare header:", e)
             return
